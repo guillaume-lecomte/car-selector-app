@@ -156,7 +156,7 @@ npm run dev
 
 Ouvrir http://localhost:3000
 
-## Optimisations Clés
+## Optimisations clés à prévoir
 
 ### 🚀 **Frontend (Next.js/React)**
 
@@ -168,6 +168,8 @@ Ouvrir http://localhost:3000
 
 - **Cache** : Redis (cache aside + invalidation Pub/Sub) pour les données fréquentes
 - **API** : Compression (gzip/brotli) + rate limiting (ex: 100 req/min/IP)
+- **Patterns*** : Mise en place d'un repository pattern pour découpler les queries de l'accès à la DB
+- **Résilience** : Ajout d'une retry logic
 
 ### 🧪 **Tests (Pyramide + AAA)**
 

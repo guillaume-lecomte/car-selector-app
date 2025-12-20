@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { type SelectionFormData, useCreateSelection } from '@/hooks';
 import { useBrands } from '@/hooks/useBrands';
@@ -10,14 +10,14 @@ import { Alert } from './ui/Alert';
 import { Button } from './ui/Button';
 import { Select } from './ui/Select';
 
+const INITIAL_FORM_DATA: SelectionFormData = {
+  brandId: null,
+  modelId: null,
+  year: null,
+};
 
 export function CarSelector() {
-  const [formData, setFormData] = useState<SelectionFormData>({
-    brandId: null,
-    modelId: null,
-    year: null,
-  });
-
+  const [formData, setFormData] = useState<SelectionFormData>(INITIAL_FORM_DATA);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const { brands, isLoading: isLoadingBrands } = useBrands();
@@ -29,73 +29,69 @@ export function CarSelector() {
     clearMessage,
   } = useCreateSelection();
 
+  const selectedBrand = brands.find((b) => b.id === formData.brandId);
+  const selectedModel = models.find((m) => m.id === formData.modelId);
+  
+  const selectionPreview = 
+    selectedBrand && selectedModel
+      ? `${selectedBrand.name} - ${selectedModel.name}${formData.year ? ` (${formData.year})` : ''}`
+      : '';
+
+  const hasData = formData.brandId !== null || formData.modelId !== null || formData.year !== null;
+
+  useEffect(() => {
+    if (formData.brandId && formData.modelId) {
+      setErrors({});
+    }
+  }, [formData.brandId, formData.modelId]);
+
   const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const brandId = e.target.value ? parseInt(e.target.value, 10) : null;
-
     setFormData({
       brandId,
       modelId: null,
       year: null,
     });
-
     setErrors({});
     clearMessage();
   };
 
   const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const modelId = e.target.value ? parseInt(e.target.value, 10) : null;
-
-    setFormData((prev) => ({
-      ...prev,
-      modelId,
-      year: null,
-    }));
-
+    setFormData((prev) => ({ ...prev, modelId, year: null }));
     setErrors((prev) => ({ ...prev, modelId: '' }));
   };
 
   const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const year = e.target.value ? parseInt(e.target.value, 10) : null;
-
     setFormData((prev) => ({ ...prev, year }));
     setErrors((prev) => ({ ...prev, year: '' }));
   };
 
+  const handleReset = () => {
+    setFormData(INITIAL_FORM_DATA);
+    setErrors({});
+    clearMessage();
+  };
+
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
-
-    if (!formData.brandId) {
-      newErrors.brandId = 'Please select a brand';
-    }
-
-    if (!formData.modelId) {
-      newErrors.modelId = 'Please select a model';
-    }
-
+    if (!formData.brandId) newErrors.brandId = 'Please select a brand';
+    if (!formData.modelId) newErrors.modelId = 'Please select a model';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!validate()) return;
 
     const { brandId, modelId, year } = formData;
     if (brandId == null || modelId == null) return;
 
-    const success = await createSelection({
-      brandId,
-      modelId,
-      year,
-    });
-
+    const success = await createSelection({ brandId, modelId, year });
     if (success) {
-      setFormData({
-        brandId: null,
-        modelId: null,
-        year: null,
-      });
+      setFormData(INITIAL_FORM_DATA);
       setErrors({});
     }
   };
@@ -109,7 +105,11 @@ export function CarSelector() {
         Select Your Car
       </h2>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form 
+        onSubmit={handleSubmit} 
+        className="space-y-4"
+        aria-label="Car selection form"
+      >
         <Select
           label="Brand"
           value={formData.brandId?.toString() || ''}
@@ -146,15 +146,56 @@ export function CarSelector() {
           }))}
         />
 
-        <Button
-          type="submit"
-          isLoading={isSubmitting}
-          disabled={!formData.brandId || !formData.modelId || isSubmitting}
-          className="w-full"
+        <div 
+          role="status" 
+          aria-live="polite" 
+          aria-atomic="true"
+          className="p-4 bg-gray-50 rounded-lg border border-gray-200 transition-all duration-200"
         >
-          {isSubmitting ? 'Saving...' : 'Save Selection'}
-        </Button>
+          <label 
+            id="selection-label"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
+            Your Selection
+          </label>
+          <div 
+            aria-labelledby="selection-label"
+            className="min-h-[2.5rem] flex items-center"
+          >
+            {selectionPreview ? (
+              <p className="text-lg font-semibold text-gray-900 animate-fade-in">
+                {selectionPreview}
+              </p>
+            ) : (
+              <p className="text-gray-400 italic">
+                No selection yet
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <Button
+            type="submit"
+            isLoading={isSubmitting}
+            disabled={!formData.brandId || !formData.modelId || isSubmitting}
+            className="flex-1"
+          >
+            {isSubmitting ? 'Saving...' : 'Save Selection'}
+          </Button>
+
+          <Button
+            type="button"
+            onClick={handleReset}
+            disabled={!hasData || isSubmitting}
+            variant="primary"
+            className="px-6"
+          >
+            Reset
+          </Button>
+        </div>
       </form>
+
       {message && (
         <Alert
           type={message.type}

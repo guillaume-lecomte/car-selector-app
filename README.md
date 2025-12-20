@@ -2,6 +2,8 @@
 
 Application web permettant de sélectionner des véhicules (marque, modèle, année) avec gestion complète via API REST.
 
+![App Preview](./public/app-preview.jpg)
+
 ---
 
 ## ⚙️ Stack technique

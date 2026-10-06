@@ -4,7 +4,7 @@ import { AppError } from '@/lib/api/errors';
 import { type PaginatedResponse, type PaginationParams } from '@/lib/api/interfaces';
 import { db } from '@/lib/db/client';
 import { brands, models, type Selection, type SelectionInput, selections } from '@/lib/db/schema';
-import { calculatePaginationMeta, validatePaginationParams } from '@/lib/utils';
+import { calculatePaginationMeta, isUniqueViolation, validatePaginationParams } from '@/lib/utils';
 
 import { validateModelBrand } from './models';
 import { type PaginatedResult } from '../interfaces/query-result';
@@ -282,6 +282,15 @@ export async function createSelection(data: SelectionInput): Promise<Selection> 
     return await getSelectionById(selection.id);
   } catch (error) {
     if (error instanceof AppError) throw error;
+    if (isUniqueViolation(error)) {
+      // Another request inserted the same selection between our check and our insert
+      throw new AppError(
+        409,
+        'A selection with these parameters already exists',
+        'SELECTION_ALREADY_EXISTS',
+        { brandId: data.brandId, modelId: data.modelId, year: data.year },
+      );
+    }
     console.error('Failed to create selection:', error);
     throw new AppError(
       500,

@@ -53,11 +53,11 @@ export const selections = pgTable(
       .defaultNow(),
   },
   (table) => [
-    unique('selections_brand_model_year_unique').on(
-      table.brandId,
-      table.modelId,
-      table.year,
-    ),
+    // NULLS NOT DISTINCT: two selections without a year for the same brand and
+    // model are duplicates too (PostgreSQL treats NULLs as distinct by default).
+    unique('selections_brand_model_year_unique')
+      .on(table.brandId, table.modelId, table.year)
+      .nullsNotDistinct(),
     // Index pour optimiser les requêtes par marque
     index('selections_brand_id_idx').on(table.brandId),
     // Index pour optimiser les requêtes par modèle

@@ -10,7 +10,7 @@ A selection form has dependent fields: the models on offer depend on the brand, 
 
 ## The approach
 
-One Next.js project (App Router) serves the UI and the API. The API is a Hono app mounted in a catch-all route handler, so there is a single process and a single deployment. Requests are validated with Zod, data access goes through Drizzle on PostgreSQL, and the server re-checks that the model belongs to the brand and that the selection does not already exist before inserting. The trade-off is that the API and the UI share one deployable unit.
+One Next.js project (App Router) serves the UI and the API. The API is a Hono app mounted in a catch-all route handler, so there is a single process and a single deployment. Requests are validated with Zod, data access goes through Drizzle on PostgreSQL, and the server re-checks that the model belongs to the brand and that the selection does not already exist before inserting, and a unique constraint in the database settles simultaneous duplicates. The trade-off is that the API and the UI share one deployable unit.
 
 ## Engineering highlights
 
@@ -18,8 +18,10 @@ One Next.js project (App Router) serves the UI and the API. The API is a Hono ap
 - **Validation at the edge.** Query, params and body are validated with Zod through `@hono/zod-validator`. See [`src/lib/api/schemas.ts`](src/lib/api/schemas.ts) and [`src/lib/api/routes/selections.ts`](src/lib/api/routes/selections.ts).
 - **Integrity in the schema.** Foreign keys with cascade, a unique model name per brand, a unique `(brand, model, year)`, and indexes on the lookup columns. See [`src/lib/db/schema.ts`](src/lib/db/schema.ts).
 - **Server-side consistency check.** Creating a selection verifies that the model belongs to the brand (`validateModelBrand`) and rejects duplicates. See [`src/lib/db/queries/selections.ts`](src/lib/db/queries/selections.ts) and [`src/lib/db/queries/models.ts`](src/lib/db/queries/models.ts).
-- **Bounded pagination.** Page size defaults to 10 and is capped at 100, and the count runs in parallel with the page query. See [`src/lib/utils.ts`](src/lib/utils.ts) and `getAllSelections` in [`src/lib/db/queries/selections.ts`](src/lib/db/queries/selections.ts).
-- **Typed application errors.** An `AppError` carries a status and a code. See [`src/lib/api/errors.ts`](src/lib/api/errors.ts). The HTTP status handling has a known issue, see below.
+- **Duplicates settled by the database.** The unique constraint on `(brand, model, year)` is `NULLS NOT DISTINCT`, so a selection without a year is a duplicate too, and a violation caught at insert time becomes a `409`. Ten simultaneous identical requests create one selection. See [`src/lib/db/schema.ts`](src/lib/db/schema.ts), `createSelection` in [`src/lib/db/queries/selections.ts`](src/lib/db/queries/selections.ts) and [`src/__tests__/api.test.ts`](src/__tests__/api.test.ts).
+- **Bounded pagination, in the API and the UI.** Page size defaults to 10 and is capped at 100, the count runs in parallel with the page query, and the list has Previous and Next controls. See [`src/lib/utils.ts`](src/lib/utils.ts), `getAllSelections` in [`src/lib/db/queries/selections.ts`](src/lib/db/queries/selections.ts) and [`src/components/SelectionsList.tsx`](src/components/SelectionsList.tsx).
+- **Typed application errors with real HTTP statuses.** An `AppError` carries a status and a code (`400`, `404`, `409`), and the response uses that status. See [`src/lib/api/errors.ts`](src/lib/api/errors.ts).
+- **API tests on a real PostgreSQL.** The Hono app is called in-process and the database is emptied between tests. See [`src/__tests__`](src/__tests__).
 
 ## Architecture
 
@@ -46,12 +48,12 @@ flowchart LR
 
 From [`package.json`](package.json) and [`docker-compose.yml`](docker-compose.yml):
 
-- Next.js 16.1.0, React 19.2.3, TypeScript 5
+- Next.js 16.3.8, React 19.2.3, TypeScript 5
 - Hono 4 with `@hono/zod-validator`, Zod 4
 - Drizzle ORM 0.45 and Drizzle Kit, `postgres` driver
 - PostgreSQL (image `supabase/postgres:15.1.0.73` in Compose)
 - Tailwind CSS 4, Radix UI Select
-- ESLint 9, Jest 30 (configured, no tests)
+- ESLint 9, Jest 30 with ts-jest
 
 ## Getting started
 
@@ -59,7 +61,7 @@ From [`package.json`](package.json) and [`docker-compose.yml`](docker-compose.ym
 git clone https://github.com/guillaume-lecomte/car-selector-app
 cd car-selector-app
 npm ci
-cp .local.env .env
+cp .env.example .env
 docker compose up -d
 npm run db:push
 npm run db:seed
@@ -68,22 +70,43 @@ npm run dev
 
 The app is then on `http://localhost:3000`. `npm run db:push` asks for a confirmation before applying the schema; add `-- --force` to skip it (`npm run db:push -- --force`).
 
-Verified on 2026-10-06 with Node.js 22 and npm 10, using a locally installed PostgreSQL 16 on port 5432 with the database `car_selector`, instead of Docker: `npm ci`, `npm run typecheck`, `npm run lint`, `npm run db:push -- --force` and `npm run db:seed` succeed (2 brands and 8 models are inserted), and the API answers on `/api/health`, `/api/brands` and `/api/selections`. The `docker compose up -d` step itself was not run.
+### Tests
+
+The tests run against a real PostgreSQL database whose name must contain `test` (the setup file refuses to run otherwise, and empties the tables between tests):
+
+```bash
+psql postgresql://postgres:postgres@localhost:5432/postgres -c "CREATE DATABASE car_selector_test"
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/car_selector_test
+npm run db:push -- --force
+npm test
+```
+
+### Upgrading an existing database
+
+The unique constraint on selections is now `NULLS NOT DISTINCT`. On a database that already holds rows, `drizzle-kit push` may offer to truncate tables to apply it. Answer no (or do not use `--force`) and run this instead, after removing any duplicate selections without a year:
+
+```sql
+ALTER TABLE selections DROP CONSTRAINT selections_brand_model_year_unique;
+ALTER TABLE selections ADD CONSTRAINT selections_brand_model_year_unique
+  UNIQUE NULLS NOT DISTINCT (brand_id, model_id, year);
+```
+
+### What was verified
+
+On 2026-10-06 with Node.js 22 and npm 10, using a locally installed PostgreSQL 16 on port 5432 instead of Docker: `npm ci`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` (19 tests), `npm run db:push -- --force` and `npm run db:seed` succeed, and the list pagination was exercised in a browser (12 selections, two pages, deletion on the second page). The `docker compose up -d` step itself was not run.
 
 ## Status
 
-Example project, not maintained. Last significant activity 2025-12-20.
+Example project, not maintained. Last significant activity 2026-10-06.
 
 ## Known issues
 
-- **No tests.** `npm test` exits with an error because no test file exists, although [`jest.config.js`](jest.config.js) sets coverage thresholds and [`src/__tests__/setup.ts`](src/__tests__/setup.ts) is in place. That setup file requires `DATABASE_URL` to contain `test` and empties the tables between tests.
-- **Business errors are returned with HTTP 200.** `handleError` returns `AppError` responses without a status ([`src/lib/api/errors.ts`](src/lib/api/errors.ts), line 30). Checked on 2026-10-06 against the running app: creating a duplicate, deleting an unknown id and sending a model that does not belong to the brand each answer `200` with `"success": false`. The UI relies on that flag. Validation errors answer `400` with a different body shape.
-- **Duplicates with no year are only checked in application code.** PostgreSQL treats `NULL` values as distinct in a unique constraint, so `(brand, model, NULL)` is not protected by the database, and the check before the insert is not atomic.
-- **The UI shows the first page only.** The list calls `/api/selections` without paging parameters ([`src/hooks/useSelections.ts`](src/hooks/useSelections.ts)), so it shows at most 10 selections although the API paginates.
-- **Dependencies.** `npm audit --omit=dev` on 2026-10-06 reports 8 advisories (1 critical in `next` 16.1.0, 6 high).
-- **Committed development credentials.** [`.local.env`](.local.env) is in the repository with a local PostgreSQL password. The `.gitignore` rule `.env*` does not match that name.
-- **Mixed package managers.** `db:reset` and `pnpm-workspace.yaml` refer to pnpm, the lockfile is npm's.
+- **Validation errors have a different body shape.** Zod validation failures answer `400` with the raw validator message, while application errors answer with `success`, `code` and `message`.
+- **The duplicate check before the insert is not atomic**, but the database constraint settles the race, see above.
+- **No authentication.** Anyone who can reach the API can create and delete selections.
 - **Unused migration files.** `src/lib/db/migrations/` exists, but `drizzle.config.ts` writes to `./drizzle` (git-ignored) and the documented flow uses `db:push`, which does not read them.
+- **`pnpm-workspace.yaml`** is left over from pnpm, the lockfile is npm's.
+- **Dependencies.** `npm audit --omit=dev` on 2026-10-06 reports 0 advisories.
 
 ## License
 

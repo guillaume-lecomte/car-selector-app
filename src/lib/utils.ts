@@ -47,3 +47,12 @@ export function calculatePaginationMeta(
     hasPreviousPage: currentPage > 1,
   };
 }
+
+/**
+ * Vrai si l'erreur vient d'une violation de contrainte d'unicité PostgreSQL
+ * (code 23505), que le driver l'expose directement ou dans `cause`.
+ */
+export function isUniqueViolation(error: unknown): boolean {
+  const candidate = error as { code?: string; cause?: { code?: string } } | null;
+  return candidate?.code === '23505' || candidate?.cause?.code === '23505';
+}

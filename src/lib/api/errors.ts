@@ -1,4 +1,5 @@
 import { type Context } from 'hono';
+import { type ContentfulStatusCode } from 'hono/utils/http-status';
 
 import { type ApiErrorResponse } from '../types';
 
@@ -27,7 +28,7 @@ export function handleError(
       details: process.env.NODE_ENV === 'development' ? error.details : undefined,
     };
 
-    return c.json(response);
+    return c.json(response, error.statusCode as ContentfulStatusCode);
   }
 
   if (error && typeof error === 'object' && 'issues' in error) {

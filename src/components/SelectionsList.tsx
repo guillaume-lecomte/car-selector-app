@@ -16,6 +16,9 @@ export function SelectionsList() {
     selections, 
     isLoading: isLoadingSelections, 
     error: loadError,
+    page,
+    setPage,
+    paginationMeta,
     refetch, 
   } = useSelections();
   
@@ -25,6 +28,8 @@ export function SelectionsList() {
     message, 
     clearMessage, 
   } = useDeleteSelection();
+
+  const totalItems = paginationMeta?.totalItems ?? selections.length;
 
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this selection?')) {
@@ -87,7 +92,7 @@ export function SelectionsList() {
             My Car Selections
           </h2>
           <p className="text-blue-100 mt-1">
-            {selections.length} {selections.length === 1 ? 'selection' : 'selections'}
+            {totalItems} {totalItems === 1 ? 'selection' : 'selections'}
           </p>
         </div>
 
@@ -143,6 +148,31 @@ export function SelectionsList() {
             </div>
           ))}
         </div>
+
+        {paginationMeta && paginationMeta.totalPages > 1 && (
+          <nav
+            className="flex items-center justify-between p-4 border-t"
+            aria-label="Selections pagination"
+          >
+            <Button
+              variant="secondary"
+              onClick={() => setPage(page - 1)}
+              disabled={!paginationMeta.hasPreviousPage}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-gray-600">
+              Page {paginationMeta.currentPage} of {paginationMeta.totalPages}
+            </span>
+            <Button
+              variant="secondary"
+              onClick={() => setPage(page + 1)}
+              disabled={!paginationMeta.hasNextPage}
+            >
+              Next
+            </Button>
+          </nav>
+        )}
       </div>
     </div>
   );

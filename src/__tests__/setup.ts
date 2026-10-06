@@ -29,6 +29,8 @@ afterAll(async () => {
     await cleanupAllTables();
   } catch (error) {
     console.error('Cleanup failed:', error);
+  } finally {
+    await db.$client.end();
   }
 });
 

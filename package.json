@@ -9,7 +9,7 @@
     "db:push": "drizzle-kit push",
     "db:seed": "tsx --tsconfig tsconfig.json src/lib/db/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "db:reset": "pnpm db:push && pnpm db:seed",
+    "db:reset": "npm run db:push -- --force && npm run db:seed",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
     "typecheck": "tsc --noEmit",

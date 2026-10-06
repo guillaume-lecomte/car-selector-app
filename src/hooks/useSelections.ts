@@ -6,25 +6,41 @@ import type { SelectionFormData, FeedbackMessage, ApiErrorResponse } from '@/lib
 
 import { useApi } from './useApi';
 
+const SELECTIONS_PAGE_SIZE = 10;
+
 export function useSelections() {
   const { refreshKey } = useSelectionsContext();
+  const [page, setPage] = useState(1);
   const {
     data: selections,
     error,
     isLoading,
+    paginationMeta,
     fetchData,
     reset,
   } = useApi<SelectionWithDetails[]>();
 
+  const url = `/api/selections?page=${page}&limit=${SELECTIONS_PAGE_SIZE}`;
+
   useEffect(() => {
-    fetchData('/api/selections');
-  }, [fetchData, refreshKey]);
+    fetchData(url);
+  }, [fetchData, url, refreshKey]);
+
+  // The last item of the last page was deleted: go back to the new last page
+  useEffect(() => {
+    if (paginationMeta && paginationMeta.totalPages > 0 && page > paginationMeta.totalPages) {
+      setPage(paginationMeta.totalPages);
+    }
+  }, [paginationMeta, page]);
 
   return {
     selections: selections || [],
     error,
     isLoading,
-    refetch: () => fetchData('/api/selections'),
+    page,
+    setPage,
+    paginationMeta,
+    refetch: () => fetchData(url),
     reset,
   };
 }
